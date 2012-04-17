@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.4
+-----
+
+* Fix for if there is a cached remote file that is corrupted (has different filesize) but has the same timestamp as the remote file
+
 0.4.3
 -----
 
