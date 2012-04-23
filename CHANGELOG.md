@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.6
+-----
+
+* Fix for tempdir creation when variable contains ~
+
 0.4.5
 -----
 
