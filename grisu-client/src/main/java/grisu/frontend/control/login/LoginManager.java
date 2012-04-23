@@ -101,6 +101,7 @@ public class LoginManager {
 			if (tmpdir.startsWith("~")) {
 				tmpdir = tmpdir.replaceFirst("~",
 						System.getProperty("user.home"));
+				System.setProperty("java.io.tmpdir", tmpdir);
 			}
 			File tmp = new File(tmpdir);
 			if (!tmp.exists()) {
