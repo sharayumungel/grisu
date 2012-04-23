@@ -20,6 +20,7 @@ import grith.jgrith.credential.Credential;
 import grith.jgrith.credential.CredentialFactory;
 import grith.jgrith.utils.CertificateFiles;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
@@ -94,6 +95,17 @@ public class LoginManager {
 	public static synchronized void initEnvironment() {
 
 		if (!environmentInitialized) {
+
+			// make sure tmp dir exists
+			String tmpdir = System.getProperty("java.io.tmpdir");
+			File tmp = new File(tmpdir);
+			if (!tmp.exists()) {
+				myLogger.debug("Creating tmpdir: {}", tmpdir);
+				tmp.mkdirs();
+				if (!tmp.exists()) {
+					myLogger.error("Could not create tmp dir {}.", tmpdir);
+				}
+			}
 
 			java.util.logging.LogManager.getLogManager().reset();
 			// LoggerFactory.getLogger("root").setLevel(Level.OFF);
