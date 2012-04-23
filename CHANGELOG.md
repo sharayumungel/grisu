@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.4.5
+-----
+
+* Fix for temporary files that don't get deleted after download
+
 0.4.4
 -----
 
