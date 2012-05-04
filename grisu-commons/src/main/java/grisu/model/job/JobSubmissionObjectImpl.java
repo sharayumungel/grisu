@@ -669,11 +669,15 @@ public class JobSubmissionObjectImpl {
 		final String jobTypeString = JsdlHelpers.getArcsJobType(jsdl);
 		if (jobTypeString != null) {
 			if (jobTypeString.toLowerCase().equals(
-					JobSubmissionProperty.FORCE_SINGLE.defaultValue())) {
+					JobSubmissionProperty
+					.getPrettyName(JobSubmissionProperty.FORCE_SINGLE
+							.toString()))) {
 				force_single = true;
 				force_mpi = false;
 			} else if (jobTypeString.toLowerCase().equals(
-					JobSubmissionProperty.FORCE_SINGLE.defaultValue())) {
+					JobSubmissionProperty
+					.getPrettyName(JobSubmissionProperty.FORCE_MPI
+							.toString()))) {
 				force_single = false;
 				force_mpi = true;
 			} else {
