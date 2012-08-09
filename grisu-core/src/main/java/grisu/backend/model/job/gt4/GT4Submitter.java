@@ -204,6 +204,7 @@ public class GT4Submitter extends JobSubmitter {
 		Long memory = JsdlHelpers.getTotalMemoryRequirement(jsdl);
 
 		if ((memory != null) && (memory >= 0)) {
+			memory = memory * processorCount;
 			final Element totalMemory = output.createElement("maxMemory");
 			// convert from bytes to mb
 			memory = memory / (1024 * 1024);
