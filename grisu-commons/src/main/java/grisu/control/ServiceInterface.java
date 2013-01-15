@@ -1058,18 +1058,18 @@ public interface ServiceInterface {
 	@Path("/info/templates")
 	String[] listHostedApplicationTemplates();
 
-	/**
-	 * Starts a session. For some service interfaces this could be just a dummy
-	 * method. Ideally a char[] would be used for the password, but jax-ws
-	 * doesn't support this.
-	 * 
-	 * @param username
-	 *            the username (probably for myproxy credential)
-	 * @param password
-	 *            the password (probably for myproxy credential)
-	 * @throws NoValidCredentialException
-	 *             if the login was not successful
-	 */
+//	/**
+//	 * Starts a session. For some service interfaces this could be just a dummy
+//	 * method. Ideally a char[] would be used for the password, but jax-ws
+//	 * doesn't support this.
+//	 * 
+//	 * @param username
+//	 *            the username (probably for myproxy credential)
+//	 * @param password
+//	 *            the password (probably for myproxy credential)
+//	 * @throws NoValidCredentialException
+//	 *             if the login was not successful
+//	 */
 	@POST
 	@Path("/user/login")
 	void login(@QueryParam("username") String username,

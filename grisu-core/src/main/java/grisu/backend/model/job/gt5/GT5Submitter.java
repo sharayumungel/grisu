@@ -5,7 +5,8 @@ import grisu.backend.model.job.Job;
 import grisu.backend.model.job.JobSubmitter;
 import grisu.backend.model.job.ServerJobSubmissionException;
 import grisu.control.JobConstants;
-import grith.jgrith.credential.Credential;
+import grith.jgrith.cred.AbstractCred;
+import grith.jgrith.cred.Cred;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -39,11 +40,11 @@ public class GT5Submitter extends JobSubmitter {
 	}
 
 	@Override
-	public int getJobStatus(Job job, Credential credential) {
+	public int getJobStatus(Job job, Cred credential) {
 		return getJobStatus(job, credential, true);
 	}
 
-	public int getJobStatus(Job grisuJob, Credential credential,
+	public int getJobStatus(Job grisuJob, Cred credential,
 			boolean restart) {
 
 		final String handle = grisuJob.getJobhandle();
@@ -53,15 +54,16 @@ public class GT5Submitter extends JobSubmitter {
 		final String contact = getContactString(handle);
 		final GramJob job = new GramJob(null);
 		GramJob restartJob = new GramJob(null);
-		final GSSCredential cred = credential.getCredential();
+		final GSSCredential cred = credential.getGSSCredential();
 
 		// try to get the state from the notification listener cache
 		Integer jobStatus = l.getStatus(handle);
 		Integer error = l.getError(handle);
+		Integer exitCode = l.getExitCode(handle);
 		if ((jobStatus != null) &&
 				((jobStatus == GRAMConstants.STATUS_DONE) ||
 						(jobStatus == GRAMConstants.STATUS_FAILED))) {
-			return translateToGrisuStatus(jobStatus, error, error);
+			return translateToGrisuStatus(jobStatus, error, exitCode);
 		}
 
 		try {
@@ -88,7 +90,7 @@ public class GT5Submitter extends JobSubmitter {
 				job.signal(GRAMConstants.SIGNAL_COMMIT_END);
 			}
 			return translateToGrisuStatus(jobStatus, job.getError(),
-					job.getError());
+					job.getExitCode());
 
 		} catch (final GramException ex) {
 			myLogger.debug("ok, normal method of getting exit status is not working. need to restart job.");
@@ -165,13 +167,13 @@ public class GT5Submitter extends JobSubmitter {
 	}
 
 	@Override
-	public int killJob(Job grisuJob, Credential cred) {
+	public int killJob(Job grisuJob, Cred cred) {
 
 		getJobStatus(grisuJob, cred);
 		final GramJob job = new GramJob(null);
 		try {
 			job.setID(grisuJob.getJobhandle());
-			job.setCredentials(cred.getCredential());
+			job.setCredentials(cred.getGSSCredential());
 			try {
 				Gram.cancel(job);
 				Gram.jobStatus(job);
@@ -201,14 +203,17 @@ public class GT5Submitter extends JobSubmitter {
 			throw new ServerJobSubmissionException(rex);
 		}
 
-		myLogger.debug("RSL is ... " + rsl);
+		
+		String rsl_pretty = rsl.replace(") (", ")\n\t(");
+		rsl_pretty = rsl_pretty.replace(")(", ")\n\t(");
+		myLogger.debug("RSL is:\n" + rsl_pretty);
 		GSSCredential credential = null;
 
 		try {
 			// credential =
 			// CredentialHelpers.convertByteArrayToGSSCredential(job
 			// .getCredential().getCredentialData());
-			credential = job.getCredential().getCredential();
+			credential = job.getCredential().getGSSCredential();
 
 			final GramJob gt5Job = new GramJob(rsl);
 			final Gram5JobListener l = Gram5JobListener.getJobListener();
@@ -237,8 +242,12 @@ public class GT5Submitter extends JobSubmitter {
 
 	}
 
-	private int translateToGrisuStatus(int status, int failureCode, int exitCode) {
+	private int translateToGrisuStatus(int status, int failureCode, Integer exitCode) {
 
+		if ( exitCode == null ) {
+			exitCode = 0;
+		}
+		
 		int grisu_status = Integer.MIN_VALUE;
 		if (status == GRAMConstants.STATUS_DONE) {
 			grisu_status = JobConstants.DONE + exitCode;

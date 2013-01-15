@@ -12,6 +12,7 @@ import grisu.jcommons.utils.HttpProxyPanel;
 import grisu.model.dto.GridFile;
 import grisu.settings.ClientPropertiesManager;
 import grith.gridsession.GridClient;
+import grith.gridsession.GridSessionCred;
 import grith.jgrith.cred.GridLoginParameters;
 
 import java.awt.AWTEvent;
@@ -25,8 +26,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import javax.swing.InputMap;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import javax.swing.UIManager;
 
 import org.apache.commons.lang.StringUtils;
@@ -62,7 +66,7 @@ WindowListener, ServiceInterfaceHolder {
 	public GrisuApplicationWindow() throws Exception {
 		this((ServiceInterfacePanel) null);
 	}
-
+	
 	public GrisuApplicationWindow(ServiceInterfacePanel panel) throws Exception {
 		super(new GridLoginParameters());
 		initialize();
@@ -82,7 +86,8 @@ WindowListener, ServiceInterfaceHolder {
 				addSettingsPanel(p.getPanelTitle(), p.getPanel());
 			}
 		}
-		addSettingsPanel("Http proxy settings", httpProxyPanel);
+		addSettingsPanel("Http proxy settings", httpProxyPanel);	
+		
 	}
 
 	/**
@@ -110,9 +115,9 @@ WindowListener, ServiceInterfaceHolder {
 			}
 		}
 		addSettingsPanel("Http proxy settings", httpProxyPanel);
+					
 
 	}
-
 
 	public void addGroupFileListPanel(List<GridFile> left, List<GridFile> right) {
 		mainPanel.addGroupFileListPanel(left, right);
@@ -123,11 +128,30 @@ WindowListener, ServiceInterfaceHolder {
 	}
 
 	abstract public boolean displayAppSpecificMonitoringItems();
-
+	
 	abstract public boolean displayBatchJobsCreationPane();
 
 	abstract public boolean displaySingleJobsCreationPane();
+	
+	abstract public boolean displayAllJobsMonitoringItem();
 
+	public void exit(boolean deleteSession) {
+		
+		if ( deleteSession ) {
+			
+			try {
+				GridSessionCred cred = new GridSessionCred(this);
+				cred.destroy();
+			} catch (Exception e) {
+				myLogger.error("Could not destroy session.", e);
+			}
+			
+			
+		}
+		
+		exit();
+	}
+	
 	public void exit() {
 		try {
 
@@ -217,19 +241,16 @@ WindowListener, ServiceInterfaceHolder {
 		frame.getContentPane().setLayout(new BorderLayout());
 
 		final boolean singleJobs = displaySingleJobsCreationPane();
-		final boolean batchJobs = displayBatchJobsCreationPane();
+		//final boolean batchJobs = displayBatchJobsCreationPane();
+		final boolean batchJobs = false;
 
 		final boolean displayAppSpecificMonitoringItems = displayAppSpecificMonitoringItems();
+		final boolean displayAllJobsMontorintItems = displayAllJobsMonitoringItem();
 
-		if (displayAppSpecificMonitoringItems) {
-			mainPanel = new GrisuMainPanel(singleJobs, false, true,
-					getApplicationsToMonitor(), batchJobs, false, true,
+			mainPanel = new GrisuMainPanel(singleJobs, displayAllJobsMontorintItems, displayAppSpecificMonitoringItems,
+					getApplicationsToMonitor(), batchJobs, displayAllJobsMontorintItems, displayAppSpecificMonitoringItems,
 					getApplicationsToMonitor());
-		} else {
-			mainPanel = new GrisuMainPanel(singleJobs, true, false,
-					getApplicationsToMonitor(), batchJobs, true, false,
-					getApplicationsToMonitor());
-		}
+
 
 		final List<ServiceInterfaceHolder> siHolders = ImmutableList
 				.of((ServiceInterfaceHolder) this);
@@ -237,6 +258,25 @@ WindowListener, ServiceInterfaceHolder {
 		final LoginPanel lp = new LoginPanel(mainPanel, siHolders);
 		lp.setSessionClient(this);
 		frame.getContentPane().add(lp, BorderLayout.CENTER);
+		
+//		  int condition = JComponent.WHEN_FOCUSED;
+////		  InputMap iMap = getFrame().getRootPane().getInputMap(condition);
+//		  InputMap iMap = (InputMap)UIManager.get("Button.focusInputMap");
+//		  iMap.put( KeyStroke.getKeyStroke( "ENTER" ), "pressed" );
+//		  iMap.put( KeyStroke.getKeyStroke( "released ENTER" ), "released" );
+//		  ActionMap aMap = getFrame().getRootPane().getActionMap();
+//
+//		  String enter = "enter";
+//		  iMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), enter);
+//		  aMap.put(enter, lp.getLoginPanel().getAction());		
+		  
+		  getFrame().getRootPane().setDefaultButton(lp.getLoginPanel().getLoginButton());
+		  
+		  JButton button = lp.getLoginPanel().getLoginButton();
+		  InputMap im = button.getInputMap();
+		  im.put( KeyStroke.getKeyStroke( "ENTER" ), "pressed" );
+		  im.put( KeyStroke.getKeyStroke( "released ENTER" ), "released" );
+
 	}
 
 	abstract protected void initOptionalStuff(ServiceInterface si);

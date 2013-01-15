@@ -11,7 +11,7 @@ import com.jgoodies.forms.layout.ColumnSpec;
 import com.jgoodies.forms.layout.FormLayout;
 import com.jgoodies.forms.layout.RowSpec;
 
-public class Walltime extends AbstractWidget {
+public class WalltimeVertical extends AbstractWidget {
 
 	private final static String[] units = new String[] { "minutes", "hours",
 			"days", "weeks" };
@@ -30,22 +30,22 @@ public class Walltime extends AbstractWidget {
 	/**
 	 * Create the panel.
 	 */
-	public Walltime() {
+	public WalltimeVertical() {
 		super();
 		setBorder(new TitledBorder(null, "Walltime", TitledBorder.LEADING,
 				TitledBorder.TOP, null, null));
 		setLayout(new FormLayout(new ColumnSpec[] {
 				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("max(35dlu;default)"),
-				FormFactory.RELATED_GAP_COLSPEC,
-				ColumnSpec.decode("max(49dlu;default)"),
+				ColumnSpec.decode("max(45dlu;default)"),
 				FormFactory.RELATED_GAP_COLSPEC,},
 			new RowSpec[] {
 				FormFactory.RELATED_GAP_ROWSPEC,
 				FormFactory.DEFAULT_ROWSPEC,
+				FormFactory.RELATED_GAP_ROWSPEC,
+				FormFactory.DEFAULT_ROWSPEC,
 				FormFactory.RELATED_GAP_ROWSPEC,}));
 		add(getAmountComboBox(), "2, 2, fill, default");
-		add(getUnitsComboBox(), "4, 2, fill, default");
+		add(getUnitsComboBox(), "2, 4, fill, default");
 
 	}
 

@@ -2,8 +2,9 @@ package grisu.backend.model;
 
 import grisu.model.MountPoint;
 import grisu.settings.ServerPropertiesManager;
-import grith.jgrith.credential.Credential;
+import grith.jgrith.cred.Cred;
 
+import java.io.File;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,8 +52,32 @@ public class FileSystemCache {
 
 			myLogger.debug(user.getDn() + ": Creating FS manager for user...");
 
+//			fsm = VFSUtil.createNewFsManager(false, false, true, true, true,
+//					true, true, "/tmp");
+			
+			//Added for windows support
+			String tempDir=System.getProperty("java.io.tmpdir");
+			
+			File td = new File(tempDir);
+			
+			if ( td.exists() ) {
+				if ( ! td.isDirectory() ) {
+					myLogger.error("Temporary directory is not directory: "+tempDir);
+				}
+				if ( ! td.canWrite() ) {
+					myLogger.error("Can't write to temporary directory: "+tempDir);
+				}
+			} else {
+				td.mkdirs();
+				if (! td.exists() ) {
+					myLogger.error("Could not create temporary directory: "+tempDir);
+				}
+				
+			}
+			
 			fsm = VFSUtil.createNewFsManager(false, false, true, true, true,
-					true, true, "/tmp");
+					true, true, tempDir);
+			
 		} catch (final FileSystemException e) {
 			throw new RuntimeException(e);
 		}
@@ -95,7 +120,7 @@ public class FileSystemCache {
 	}
 
 	private FileSystem createFileSystem(String rootUrl,
-			Credential credToUse)
+			Cred credToUse)
 					throws FileSystemException {
 
 		final FileSystemOptions opts = new FileSystemOptions();
@@ -108,7 +133,7 @@ public class FileSystemCache {
 
 				final GridFtpFileSystemConfigBuilder builder = GridFtpFileSystemConfigBuilder
 						.getInstance();
-				builder.setGSSCredential(opts, credToUse.getCredential());
+				builder.setGSSCredential(opts, credToUse.getGSSCredential());
 				builder.setTimeout(opts,
 						ServerPropertiesManager.getFileSystemConnectTimeout());
 				// builder.setUserDirIsRoot(opts, true);
@@ -137,13 +162,16 @@ public class FileSystemCache {
 			throws FileSystemException {
 
 		synchronized (rootUrl) {
-			Credential credToUse = null;
+			Cred credToUse = null;
 
 			MountPoint temp = null;
 			try {
+				String tmp = fqan;
 				temp = user.getResponsibleMountpointForAbsoluteFile(rootUrl);
 			} catch (final IllegalStateException e) {
-				// myLogger.info(e);
+				 myLogger.debug("Can't get mountpoint, mountpoints not set yet.");
+			} catch (final Exception e) {
+				 myLogger.debug("Can't get mountpoint, unknown reason.");
 			}
 			if ((fqan == null) && (temp != null) && (temp.getFqan() != null)) {
 				fqan = temp.getFqan();

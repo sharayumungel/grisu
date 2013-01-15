@@ -18,9 +18,12 @@ import grisu.model.UserEnvironmentManager;
 import grisu.model.dto.DtoJob;
 import grisu.model.dto.DtoJobs;
 import grisu.model.dto.GridFile;
+import grisu.model.info.dto.DtoStringList;
+import grisu.model.status.StatusObject;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -41,6 +44,8 @@ import org.slf4j.LoggerFactory;
 import ca.odell.glazedlists.BasicEventList;
 import ca.odell.glazedlists.EventList;
 
+import com.google.common.collect.Sets;
+
 public class RunningJobManager implements EventSubscriber {
 
 	private class UpdateTimerTask extends TimerTask {
@@ -53,7 +58,7 @@ public class RunningJobManager implements EventSubscriber {
 				// update single jobs
 				for (final String application : cachedSingleJobsPerApplication
 						.keySet()) {
-					updateJobnameList(application);
+					updateJobnameList(application, false);
 				}
 
 				for (final String application : cachedBatchJobsPerApplication
@@ -143,6 +148,8 @@ public class RunningJobManager implements EventSubscriber {
 
 		return cachedRegistries.get(si);
 	}
+	
+	public static final Long MIN_WAIT_TIME_SEC = 5L;
 
 	private final UserEnvironmentManager em;
 	private final FileManager fm;
@@ -163,6 +170,8 @@ public class RunningJobManager implements EventSubscriber {
 	private final Map<String, EventList<BatchJobObject>> cachedBatchJobsPerApplication = Collections
 			.synchronizedMap(new HashMap<String, EventList<BatchJobObject>>());
 
+	private final Map<String, Long> jobListAccessTime = Collections.synchronizedMap(new HashMap<String, Long>());
+	
 	private final Timer updateTimer = new Timer();;
 
 	// private final boolean checkForNewApplicationsForSingleJobs = false;
@@ -198,6 +207,12 @@ public class RunningJobManager implements EventSubscriber {
 		}
 		return batchJob;
 
+	}
+
+	public synchronized void createJob(JobObject job)
+			throws JobPropertiesException {
+
+		createJob(job, null);
 	}
 
 	public synchronized void createJob(JobObject job, String fqan)
@@ -301,7 +316,7 @@ public class RunningJobManager implements EventSubscriber {
 
 	public List<GridFile> getFinishedOutputFilesForBatchJob(
 			BatchJobObject batchJob, String[] patterns)
-					throws RemoteFileSystemException {
+			throws RemoteFileSystemException {
 
 		final List<GridFile> files = new LinkedList<GridFile>();
 
@@ -396,7 +411,7 @@ public class RunningJobManager implements EventSubscriber {
 		if (event instanceof NewBatchJobEvent) {
 			final NewBatchJobEvent ev = (NewBatchJobEvent) event;
 			GrisuRegistryManager.getDefault(si).getUserEnvironmentManager()
-			.getCurrentBatchJobnames(true);
+					.getCurrentBatchJobnames(true);
 
 			new Thread() {
 				@Override
@@ -419,12 +434,12 @@ public class RunningJobManager implements EventSubscriber {
 			final NewJobEvent ev = (NewJobEvent) event;
 
 			GrisuRegistryManager.getDefault(si).getUserEnvironmentManager()
-			.getCurrentJobnames(true);
+					.getCurrentJobnames(true);
 			new Thread() {
 				@Override
 				public void run() {
 
-					updateJobnameList(ev.getJob().getApplication());
+					updateJobnameList(ev.getJob().getApplication(), true);
 				}
 			}.start();
 
@@ -434,7 +449,7 @@ public class RunningJobManager implements EventSubscriber {
 				@Override
 				public void run() {
 
-					updateJobnameList(ev.getJob().getApplication());
+					updateJobnameList(ev.getJob().getApplication(), true);
 				}
 			}.start();
 		}
@@ -522,84 +537,144 @@ public class RunningJobManager implements EventSubscriber {
 
 	}
 
-	public synchronized Thread updateJobnameList(String application) {
+	public Thread updateJobnameList(String app, boolean force) {
 
-		if (StringUtils.isBlank(application)) {
-			application = Constants.ALLJOBS_KEY;
+		if (StringUtils.isBlank(app)) {
+			app = Constants.ALLJOBS_KEY;
 		}
+		
+		final String application = app.toLowerCase();
+		
+		synchronized (application.intern()) {
 
-		application = application.toLowerCase();
+			Long lastAccess = jobListAccessTime.get(application);
+			
+			Long now = new Date().getTime();
+			
+			if ( lastAccess != null && now-lastAccess < MIN_WAIT_TIME_SEC  && ! force) {
+				return null;
+			} else {
+				jobListAccessTime.put(application, new Date().getTime());
+			}
 
-		final EventList<JobObject> list = getJobs(application);
+			final EventList<JobObject> list = getJobs(application);
 
-		final SortedSet<String> jobnames = em.getCurrentJobnames(application,
-				true);
-		final SortedSet<String> jobnamesNew = new TreeSet<String>(jobnames);
+			final SortedSet<String> jobnames = em.getCurrentJobnames(
+					application, true);
+			final SortedSet<String> jobnamesNew = new TreeSet<String>(jobnames);
 
-		for (final JobObject j : list) {
-			final String jobname = j.getJobname();
-			jobnamesNew.remove(jobname);
-		}
-		for (final String name : jobnamesNew) {
-			try {
-				if (StringUtils.isBlank(name)) {
-					continue;
-				}
-				final JobObject temp = getJob(name, false);
-				if (temp == null) {
-					continue;
-				}
-				if (watchingAllSingleJobs) {
-					if (!getAllJobs().contains(temp)) {
-						getAllJobs().getReadWriteLock().writeLock().lock();
-						getAllJobs().add(temp);
-						getAllJobs().getReadWriteLock().writeLock().unlock();
+			for (final JobObject j : list) {
+				final String jobname = j.getJobname();
+				jobnamesNew.remove(jobname);
+			}
+			for (final String name : jobnamesNew) {
+				try {
+					if (StringUtils.isBlank(name)) {
+						continue;
 					}
+					final JobObject temp = getJob(name, false);
+					if (temp == null) {
+						continue;
+					}
+					if (watchingAllSingleJobs) {
+						if (!getAllJobs().contains(temp)) {
+							getAllJobs().getReadWriteLock().writeLock().lock();
+							getAllJobs().add(temp);
+							getAllJobs().getReadWriteLock().writeLock()
+									.unlock();
+						}
+					}
+					if (!list.contains(temp)) {
+						list.getReadWriteLock().writeLock().lock();
+						list.add(temp);
+						list.getReadWriteLock().writeLock().unlock();
+					}
+				} catch (final NoSuchJobException e) {
+					throw new RuntimeException(e);
 				}
-				if (!list.contains(temp)) {
-					list.getReadWriteLock().writeLock().lock();
-					list.add(temp);
-					list.getReadWriteLock().writeLock().unlock();
+			}
+
+			final Set<JobObject> toRemove = new HashSet<JobObject>();
+			for (final JobObject j : list) {
+				final String jobname = j.getJobname();
+				if (!jobnames.contains(jobname)) {
+					toRemove.add(j);
 				}
-			} catch (final NoSuchJobException e) {
-				throw new RuntimeException(e);
+			}
+
+			if (watchingAllSingleJobs) {
+				getAllJobs().getReadWriteLock().writeLock().lock();
+				getAllJobs().removeAll(toRemove);
+				getAllJobs().getReadWriteLock().writeLock().unlock();
+			}
+
+			list.removeAll(toRemove);
+			for (final JobObject j : toRemove) {
+				cachedAllSingleJobs.remove(j.getJobname());
+			}
+			
+			// do the rest in the background
+			final Thread t = new Thread() {
+				@Override
+				public void run() {
+
+					final Set<JobObject> tempList = new HashSet<JobObject>(
+							getAllCurrentlyWatchedSingleJobs());
+					for (final JobObject job : tempList) {
+						myLogger.debug("Refreshing job: " + job.getJobname());
+						job.getStatus(true);
+					}
+					jobListAccessTime.put(application, new Date().getTime());
+
+				}
+			};
+			t.start();
+			return t;
+		}
+	}
+
+	public void killJobs(List<JobObject> jobs, boolean clean) {
+
+		if (jobs == null || jobs.size() == 0) {
+			return;
+		}
+
+		if (clean) {
+			for (JobObject job : jobs) {
+				job.setBeingCleaned(true);
 			}
 		}
 
-		final Set<JobObject> toRemove = new HashSet<JobObject>();
-		for (final JobObject j : list) {
-			final String jobname = j.getJobname();
-			if (!jobnames.contains(jobname)) {
-				toRemove.add(j);
-			}
+		Set<String> list = Sets.newTreeSet();
+		for (JobObject job : jobs) {
+			list.add(job.getJobname());
 		}
 
-		if (watchingAllSingleJobs) {
-			getAllJobs().getReadWriteLock().writeLock().lock();
-			getAllJobs().removeAll(toRemove);
-			getAllJobs().getReadWriteLock().writeLock().unlock();
-		}
+		final String handle = si.killJobs(
+				DtoStringList.fromStringColletion(list), clean);
 
-		list.removeAll(toRemove);
-		for (final JobObject j : toRemove) {
-			cachedAllSingleJobs.remove(j.getJobname());
-		}
-
-		// do the rest in the background
-		final Thread t = new Thread() {
-			@Override
+		Thread t = new Thread() {
 			public void run() {
 
-				final Set<JobObject> tempList = new HashSet<JobObject>(
-						getAllCurrentlyWatchedSingleJobs());
-				for (final JobObject job : tempList) {
-					myLogger.debug("Refreshing job: " + job.getJobname());
-					job.getStatus(true);
+				try {
+					StatusObject so = new StatusObject(si, handle);
+					while (!so.isFinished()) {
+						updateJobnameList(null, false);
+						Thread.sleep(2000);
+					}
+				} catch (Exception e) {
+					myLogger.debug(
+							"Error when waiting for multiple job cleaning to finish: "
+									+ e.getLocalizedMessage(), e);
+				} finally {
+					updateJobnameList(null, true);
 				}
 			}
 		};
+		t.setName("multi job clean wait");
+		t.setPriority(Thread.MIN_PRIORITY);
 		t.start();
-		return t;
+
 	}
 
 }

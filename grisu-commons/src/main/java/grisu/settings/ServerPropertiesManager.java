@@ -890,7 +890,7 @@ public final class ServerPropertiesManager {
 	 * @return true if debug is enabled, false if not
 	 */
 	public static boolean useFileSystemCache() {
-		boolean useFScache = true;
+		boolean useFScache = false;
 
 		try {
 			try {
@@ -906,6 +906,26 @@ public final class ServerPropertiesManager {
 			myLogger.debug(e.getLocalizedMessage());
 		}
 		return useFScache;
+	}
+
+	public static boolean isUseStatistics() {
+		
+		boolean stats = false;
+
+		try {
+			try {
+				stats = getServerConfiguration().getBoolean("General.statistics");
+			} catch (final NoSuchElementException e) {
+				// doesn't matter
+				myLogger.debug(e.getLocalizedMessage());
+			}
+
+		} catch (final ConfigurationException e) {
+			// myLogger.error("Problem with config file: " + e.getMessage());
+			myLogger.debug(e.getLocalizedMessage());
+		}
+		return stats;
+
 	}
 
 }

@@ -1,6 +1,7 @@
 package grisu.backend.model.job;
 
 import grisu.backend.hibernate.JobDAO;
+import grisu.backend.hibernate.JobStatDAO;
 import grisu.backend.model.RemoteFileTransferObject;
 import grisu.backend.model.User;
 import grisu.backend.model.fs.GrisuInputStream;
@@ -30,7 +31,7 @@ import grisu.model.status.StatusObject;
 import grisu.settings.ServerPropertiesManager;
 import grisu.utils.ServiceInterfaceUtils;
 import grisu.utils.SeveralXMLHelpers;
-import grith.jgrith.credential.Credential;
+import grith.jgrith.cred.Cred;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -51,6 +52,8 @@ import javax.persistence.Transient;
 import net.sf.ehcache.util.NamedThreadFactory;
 
 import org.apache.commons.lang.StringUtils;
+import org.globus.rsl.Binding;
+import org.globus.rsl.Bindings;
 import org.simpleframework.xml.Serializer;
 import org.simpleframework.xml.core.Persister;
 import org.slf4j.Logger;
@@ -58,6 +61,7 @@ import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
 
 /**
@@ -90,6 +94,7 @@ public class UserJobManager {
 	private final User user;
 
 	protected final JobDAO jobdao = new JobDAO();
+	protected final JobStatDAO jobstatdao = new JobStatDAO();
 
 
 	public final static boolean INCLUDE_MULTIPARTJOBS_IN_PS_COMMAND = false;
@@ -535,7 +540,9 @@ public class UserJobManager {
 		job.setStatus(JobConstants.READY_TO_SUBMIT);
 		job.addLogMessage("Job " + jobname + " ready to submit.");
 
+		jobstatdao.saveOrUpdate(job, true);
 		jobdao.saveOrUpdate(job);
+		
 		return jobname;
 	}
 
@@ -835,7 +842,7 @@ public class UserJobManager {
 			return job.getStatus();
 		}
 
-		final Credential cred = job.getCredential();
+		final Cred cred = job.getCredential();
 		boolean changedCred = false;
 		// TODO check whether cred is stored in the database in that case? also,
 		// is a voms credential needed? -- apparently not - only dn must match
@@ -889,6 +896,7 @@ public class UserJobManager {
 			}
 		}
 		job.setLastStatusCheck(new Date());
+		jobstatdao.saveOrUpdate(job, true);
 		jobdao.saveOrUpdate(job);
 
 		// myLogger.debug("Status of job: " + job.getJobname() + " is: " +
@@ -952,7 +960,7 @@ public class UserJobManager {
 
 		if (old_status > JobConstants.READY_TO_SUBMIT) {
 
-			final Credential cred = job.getCredential();
+			final Cred cred = job.getCredential();
 			boolean changedCred = false;
 			// TODO check whether cred is stored in the database in that case?
 			if ((cred == null) || !cred.isValid()) {
@@ -987,6 +995,7 @@ public class UserJobManager {
 				"Job: " + job.getJobname() + " killed, new status: "
 						+ JobConstants.translateStatus(new_status));
 		jobdao.saveOrUpdate(job);
+		jobstatdao.saveOrUpdate(job, true);
 		// myLogger.debug("Status of job: " + job.getJobname() + " is: "
 		// + new_status);
 
@@ -1069,6 +1078,7 @@ public class UserJobManager {
 						status.addLogMessage("Removing job from db...");
 						myLogger.debug("Removing job " + job.getJobname()
 								+ " from db.");
+						jobstatdao.saveOrUpdate(job, false);
 						jobdao.delete(job);
 						myLogger.debug("Removing job " + job.getJobname()
 								+ " from db finished.");
@@ -2376,6 +2386,15 @@ public class UserJobManager {
 		job.addJobProperty(Constants.JOBDIRECTORY_KEY, newJobdir);
 		job.addJobProperty(Constants.SUBMISSIONBACKEND_KEY,
 				AbstractServiceInterface.getBackendInfo());
+		
+		final Map<String, String> env = JsdlHelpers
+				.getPosixApplicationEnvironment(jsdl);
+		if ((env != null) && (env.size() > 0)) {
+			String envVars = Joiner.on("|").withKeyValueSeparator("=").join(env);
+			job.addJobProperty(Constants.ENVIRONMENT_VARIABLES_KEY, envVars);
+		}
+		
+
 
 		myLogger.debug("Preparing job done.");
 	}
@@ -2514,6 +2533,7 @@ public class UserJobManager {
 		myLogger.info("Submitting job: " + job.getJobname() + " for user "
 				+ getUser().getDn());
 		job.addLogMessage("Starting re-submission...");
+		jobstatdao.saveOrUpdate(job, true);
 		jobdao.saveOrUpdate(job);
 		try {
 			submitJob(job, false, status);
@@ -2750,6 +2770,7 @@ public class UserJobManager {
 		myLogger.debug(debug_token
 				+ " adding job properties as env variables to jsdl..");
 		Document oldJsdl = job.getJobDescription();
+
 		for (String key : job.getJobProperties().keySet()) {
 			String value = job.getJobProperty(key);
 			key = "GRISU_" + key.toUpperCase();
@@ -2760,7 +2781,7 @@ public class UserJobManager {
 				e.setTextContent(value);
 			}
 		}
-
+		
 		job.setJobDescription(oldJsdl);
 
 		String handle = null;
@@ -2870,6 +2891,7 @@ public class UserJobManager {
 					job,
 					"Job submission for job: " + job.getJobname()
 					+ " finished successful.");
+			jobstatdao.saveOrUpdate(job, true);
 			jobdao.saveOrUpdate(job);
 			myLogger.debug(debug_token + " wrapping up finished");
 			myLogger.info("Jobsubmission for job " + job.getJobname()

@@ -10,6 +10,7 @@ import grisu.jcommons.dependencies.BouncyCastleTool;
 import grisu.jcommons.dependencies.ClasspathHacker;
 import grisu.jcommons.utils.DefaultGridSecurityProvider;
 import grisu.jcommons.utils.EnvironmentVariableHelpers;
+import grisu.jcommons.utils.HttpProxyManager;
 import grisu.jcommons.utils.JythonHelpers;
 import grisu.jcommons.view.cli.CliHelpers;
 import grisu.model.GrisuRegistryManager;
@@ -24,14 +25,9 @@ import grith.jgrith.utils.CertificateFiles;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
 import java.util.Date;
 
-import org.apache.commons.httpclient.protocol.Protocol;
-import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.ssl.HttpSecureProtocol;
-import org.apache.commons.ssl.TrustMaterial;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -44,7 +40,7 @@ public class LoginManager {
 
 
 	public static int REQUIRED_BACKEND_API_VERSION = 16;
-	public static final String DEFAULT_BACKEND = "testbed";
+	public static final String DEFAULT_BACKEND = "bestgrid";
 	public static final int DEFAULT_PROXY_LIFETIME_IN_HOURS = 240;
 
 
@@ -122,6 +118,8 @@ public class LoginManager {
 	public static synchronized void initEnvironment() {
 
 		if (!environmentInitialized) {
+			
+			HttpProxyManager.setDefaultHttpProxy();
 
 			// make sure tmp dir exists
 			String tmpdir = System.getProperty("java.io.tmpdir");
@@ -245,47 +243,7 @@ public class LoginManager {
 				throw new RuntimeException(e2);
 			}
 
-			// do the cacert thingy
-			try {
-				final URL cacertURL = LoginManager.class
-						.getResource("/ipsca.pem");
-				final HttpSecureProtocol protocolSocketFactory = new HttpSecureProtocol();
 
-				TrustMaterial trustMaterial = null;
-				trustMaterial = new TrustMaterial(cacertURL);
-
-				// We can use setTrustMaterial() instead of addTrustMaterial()
-				// if we want to remove
-				// HttpSecureProtocol's default trust of TrustMaterial.CACERTS.
-				protocolSocketFactory.addTrustMaterial(trustMaterial);
-
-				// Maybe we want to turn off CN validation (not recommended!):
-				protocolSocketFactory.setCheckHostname(false);
-
-				final Protocol protocol = new Protocol("https",
-						(ProtocolSocketFactory) protocolSocketFactory, 443);
-				Protocol.registerProtocol("https", protocol);
-			} catch (final Exception e) {
-				myLogger.error(e.getLocalizedMessage(), e);
-			}
-
-			if (displayCliProgress) {
-				CliHelpers.setIndeterminateProgress("Uploading credential...",
-						true);
-			}
-
-			try {
-				cred.saveProxy();
-			} catch (Exception e) {
-				myLogger.error("Can't save proxy to disk", e);
-			}
-
-			try {
-				cred.uploadMyProxy();
-			} catch (Exception e) {
-				throw new LoginException(
-						"Could not upload myproxy credential.", e);
-			}
 
 			ServiceInterface si;
 			if (displayCliProgress) {
@@ -295,10 +253,7 @@ public class LoginManager {
 			try {
 
 				si = ServiceInterfaceFactory.createInterface(backend,
-						cred.getMyProxyUsername(), cred.getMyProxyPassword(),
-						cred.getMyProxyHost(),
-						Integer.toString(cred.getMyProxyPort()), null, -1,
-						null, null);
+						cred, null);
 				// loginParams.getHttpProxy(),
 				// loginParams.getHttpProxyPort(),
 				// loginParams.getHttpProxyUsername(),
